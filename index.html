@@ -1852,6 +1852,7 @@ function updateRent() {
 // ===== SECTION 5: DCF ENGINE =====
 
 function calcMonthlyPayment(principal, annualRate, years) {
+  if (years <= 0) return 0;
   if (principal <= 0 || annualRate <= 0) return 0;
   const r = annualRate / 12;
   const n = years * 12;
@@ -1905,7 +1906,6 @@ function buildCashFlows() {
 
   const monthlyRent = num('rent-monthly');
   const otherIncome = num('rent-other') || 0;
-  const unitCount = num('unit-count') || 4;
   const vacancy = num('rent-vacancy') / 100;
 
   const years = [];
@@ -1913,7 +1913,7 @@ function buildCashFlows() {
   for (let yr = 1; yr <= holdYears; yr++) {
     const growthFactor = Math.pow(1 + rentGrowth, yr - 1);
     const expGrowthFactor = Math.pow(1 + expenseGrowth, yr - 1);
-    const gpr = (monthlyRent * unitCount + otherIncome) * 12 * growthFactor;
+    const gpr = (monthlyRent * units + otherIncome) * 12 * growthFactor;
     const vacancyLoss = gpr * vacancy;
     const egi = gpr - vacancyLoss;
 
@@ -1938,7 +1938,7 @@ function buildCashFlows() {
     const propValue = totalInvest * Math.pow(1 + appreciation, yr);
 
     const taxableIncome = noi - interestPaid - annualDepr;
-    const taxSavings = taxableIncome < 0 ? Math.abs(taxableIncome) * incomeTaxRate : -taxableIncome * incomeTaxRate;
+    const taxSavings = -taxableIncome * incomeTaxRate;
 
     years.push({
       year: yr, gpr, vacancyLoss, egi, totalOpEx, noi,
@@ -1989,7 +1989,9 @@ function renderDCF(data) {
   });
   const last = years[years.length - 1];
   const saleCosts = last.propValue * data.saleCostsPct;
-  const saleProceeds = last.propValue - saleCosts - last.loanBalance;
+  const gain = Math.max(0, last.propValue - data.totalInvest);
+  const capGainsTaxAmt = gain * data.capGainsTax;
+  const saleProceeds = last.propValue - saleCosts - last.loanBalance - capGainsTaxAmt;
   html += `<tr style="font-weight:700;border-top:2px solid var(--magenta)">
     <td>Sale</td><td colspan="4">Net proceeds (after ${fmtPct(data.saleCostsPct*100,0)} sale costs &amp; loan payoff)</td>
     <td class="positive">${fmtD(saleProceeds)}</td>
@@ -2012,6 +2014,8 @@ function calcIRR(cashFlows, guess = 0.1) {
     const newRate = rate - npv / dnpv;
     if (Math.abs(newRate - rate) < 1e-8) { rate = newRate; break; }
     rate = newRate;
+    rate = Math.max(-0.99, Math.min(rate, 10.0));
+    if (!isFinite(rate)) break;
   }
   return isFinite(rate) ? rate : 0;
 }
@@ -2044,7 +2048,9 @@ function renderSummary(data) {
   $('sum-dscr').style.color = dscr >= 1.25 ? 'var(--green)' : dscr >= 1.0 ? 'var(--yellow)' : 'var(--red)';
 
   const saleCosts = last.propValue * data.saleCostsPct;
-  const saleProceeds = last.propValue - saleCosts - last.loanBalance;
+  const gain = Math.max(0, last.propValue - data.totalInvest);
+  const capGainsTaxAmt = gain * data.capGainsTax;
+  const saleProceeds = last.propValue - saleCosts - last.loanBalance - capGainsTaxAmt;
   const cfArray = [-cashInvested];
   years.forEach((y, i) => {
     let cf = y.leveredCF;
@@ -2575,7 +2581,7 @@ floatingTip.className = 'floating-tooltip';
 floatingTip.style.display = 'none';
 document.body.appendChild(floatingTip);
 
-function showTableTooltip(jargonEl, e) {
+function showTableTooltip(jargonEl) {
   const tipEl = jargonEl.querySelector('.tip');
   if (!tipEl) return;
   floatingTip.textContent = tipEl.textContent;
@@ -2595,7 +2601,7 @@ function hideTableTooltip() {
 }
 
 document.querySelectorAll('th .jargon').forEach(jargon => {
-  jargon.addEventListener('mouseenter', function(e) { showTableTooltip(this, e); });
+  jargon.addEventListener('mouseenter', function() { showTableTooltip(this); });
   jargon.addEventListener('mouseleave', hideTableTooltip);
   jargon.addEventListener('touchstart', function(e) {
     e.preventDefault();
@@ -2603,7 +2609,7 @@ document.querySelectorAll('th .jargon').forEach(jargon => {
     const isVisible = floatingTip.style.display === 'block';
     hideTableTooltip();
     if (!isVisible || floatingTip._source !== this) {
-      showTableTooltip(this, e);
+      showTableTooltip(this);
       floatingTip._source = this;
     }
   }, { passive: false });
@@ -2618,7 +2624,6 @@ document.addEventListener('touchstart', function(e) {
 // ===== INIT =====
 updateLegal();
 updateCost();
-updateAll();
 </script>
 
 </body>
