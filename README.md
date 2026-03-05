@@ -18,4 +18,4 @@ A single-page multi-family investment property financial calculator supporting 2
 - Smooth scroll-reveal animations
 
 ## Deployment
-Deployed via Netlify Drop: `npx netlify-cli deploy --dir . --prod`
+Hosted on GitHub Pages: https://mal521.github.io/multifamily-dd
